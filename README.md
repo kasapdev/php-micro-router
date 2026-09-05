@@ -1,6 +1,6 @@
 # php-micro-router
 
-[![CI](https://github.com/kasapdev/php-micro-router/actions/workflows/ci.yml/badge.svg)](https://github.com/kasapdev/php-micro-router/actions/workflows/ci.yml)
+[![CI](https://github.com/kasapdev/php-micro-router/actions/workflows/ci.yml/badge.svg)](https://github.com/kasapdev/php-micro-router/actions/workflows/ci.yml) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) ![PHP](https://img.shields.io/badge/PHP-8.1%2B-777BB4?logo=php&logoColor=white)
 
 A tiny, zero-dependency PHP router. Static and parameterized paths (`{id}`, or `{id:\d+}` with a
 custom regex constraint), nested route groups, global and per-route middleware built as an
