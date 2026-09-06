@@ -211,5 +211,46 @@ check(
     $router->dispatch('GET', '/wildcard/fixed') === 'fixed'
 );
 
+// --- Static path segments with regex-special characters are matched literally -----------
+
+$router = new Router();
+$router->get('/status.json', fn () => 'literal-dot');
+
+check('literal dot in static path is escaped, not treated as regex wildcard', $router->dispatch('GET', '/status.json') === 'literal-dot');
+
+$threw = false;
+try {
+    $router->dispatch('GET', '/statusXjson');
+} catch (RouteNotFoundException $e) {
+    $threw = true;
+}
+check('dot in static path does not match an arbitrary character', $threw);
+
+// --- Incoming request method is case-insensitive ------------------------------------------
+
+$router = new Router();
+$router->get('/hello', fn () => 'hi');
+
+check('dispatch() uppercases a lowercase incoming method to match a registered route', $router->dispatch('get', '/hello') === 'hi');
+
+// --- Query string array-style parameters are parsed into real arrays ----------------------
+
+$router = new Router();
+$router->get('/search', fn (array $req) => $req['query']['tags'] ?? []);
+
+check(
+    'array-style query params (tags[]=a&tags[]=b) parse into a PHP array',
+    $router->dispatch('GET', '/search?tags[]=a&tags[]=b') === ['a', 'b']
+);
+
+// --- Group registered with an empty/whitespace-only prefix does not corrupt the path ------
+
+$router = new Router();
+$router->group('', function (Router $r) {
+    $r->get('/plain', fn () => 'no-prefix');
+});
+
+check('group() with an empty prefix does not introduce a doubled slash', $router->dispatch('GET', '/plain') === 'no-prefix');
+
 echo $__failures === 0 ? "\nAll tests passed.\n" : "\n$__failures test(s) FAILED.\n";
 exit($__failures === 0 ? 0 : 1);
