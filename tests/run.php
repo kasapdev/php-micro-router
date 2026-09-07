@@ -16,8 +16,10 @@ require_once __DIR__ . '/../src/Route.php';
 require_once __DIR__ . '/../src/Router.php';
 require_once __DIR__ . '/../src/RouteNotFoundException.php';
 require_once __DIR__ . '/../src/MethodNotAllowedException.php';
+require_once __DIR__ . '/../src/MissingRouteParameterException.php';
 
 use Kasapdev\MicroRouter\MethodNotAllowedException;
+use Kasapdev\MicroRouter\MissingRouteParameterException;
 use Kasapdev\MicroRouter\RouteNotFoundException;
 use Kasapdev\MicroRouter\Router;
 
@@ -251,6 +253,53 @@ $router->group('', function (Router $r) {
 });
 
 check('group() with an empty prefix does not introduce a doubled slash', $router->dispatch('GET', '/plain') === 'no-prefix');
+
+// --- Named routes and URL generation ----------------------------------------------------
+
+$router = new Router();
+$router->get('/users/{id}', fn (array $req) => 'user:' . $req['params']['id'])->name('user.show');
+
+check('url() builds a path from a named route and its params', $router->url('user.show', ['id' => 42]) === '/users/42');
+
+$router = new Router();
+$router->get('/posts/{year}/{slug:[a-z0-9-]+}', fn () => 'post')->name('post.show');
+
+check(
+    'url() substitutes multiple placeholders, including a regex-constrained one',
+    $router->url('post.show', ['year' => 2026, 'slug' => 'hello-world']) === '/posts/2026/hello-world'
+);
+
+$router = new Router();
+$router->group('/api', function (Router $r) {
+    $r->get('/v1/users/{id}', fn (array $req) => 'api-user:' . $req['params']['id'])->name('api.user.show');
+});
+
+check(
+    'url() works for a named route registered inside a group (full prefixed path)',
+    $router->url('api.user.show', ['id' => 7]) === '/api/v1/users/7'
+);
+
+$router = new Router();
+$router->get('/users/{id}', fn () => 'user')->name('user.show');
+
+$threw = false;
+try {
+    $router->url('user.show', []);
+} catch (MissingRouteParameterException $e) {
+    $threw = true;
+}
+check('url() throws MissingRouteParameterException when a required param is missing', $threw);
+
+$router = new Router();
+$router->get('/users/{id}', fn () => 'user')->name('user.show');
+
+$threw = false;
+try {
+    $router->url('no.such.route', ['id' => 1]);
+} catch (RouteNotFoundException $e) {
+    $threw = true;
+}
+check('url() throws RouteNotFoundException for an unregistered route name', $threw);
 
 echo $__failures === 0 ? "\nAll tests passed.\n" : "\n$__failures test(s) FAILED.\n";
 exit($__failures === 0 ? 0 : 1);

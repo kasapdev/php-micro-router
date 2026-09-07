@@ -81,6 +81,25 @@ final class Router
         $this->globalMiddleware[] = $middleware;
     }
 
+    /**
+     * Build the real path for a named route (registered via ->name()) by
+     * substituting its `{param}` placeholders with the given values.
+     *
+     * @param array<string,int|string> $params
+     * @throws RouteNotFoundException          if no route was registered with this name.
+     * @throws MissingRouteParameterException  if a required placeholder is missing from $params.
+     */
+    public function url(string $name, array $params = []): string
+    {
+        foreach ($this->routes as $route) {
+            if ($route->getName() === $name) {
+                return $route->buildUrl($params);
+            }
+        }
+
+        throw new RouteNotFoundException(sprintf('No named route "%s" is registered', $name));
+    }
+
     private function addRoute(string $method, string $path, callable $handler): Route
     {
         $fullPath = $this->currentPrefix() . '/' . ltrim($path, '/');

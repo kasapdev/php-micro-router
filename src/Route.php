@@ -11,6 +11,9 @@ namespace Kasapdev\MicroRouter;
  */
 final class Route
 {
+    /** Matches `{name}` or `{name:regex}` placeholder tokens in a path template. */
+    private const PARAM_PATTERN = '#\{([a-zA-Z_][a-zA-Z0-9_]*)(:([^{}]+))?\}#';
+
     /** @var callable[] */
     private array $middleware = [];
 
@@ -19,6 +22,9 @@ final class Route
 
     /** @var string[] Ordered list of parameter names found in the path. */
     private readonly array $paramNames;
+
+    /** Optional name used to look this route back up via Router::url(). */
+    private ?string $name = null;
 
     /**
      * @param string $method  Uppercase HTTP method, or "*" to match any method.
@@ -50,6 +56,49 @@ final class Route
     public function getMiddleware(): array
     {
         return $this->middleware;
+    }
+
+    /**
+     * Name this route so it can be looked up later via Router::url().
+     * Returns $this for fluent chaining: $router->get(...)->name('user.show').
+     */
+    public function name(string $name): static
+    {
+        $this->name = $name;
+
+        return $this;
+    }
+
+    /** The name assigned via ->name(), or null if this route is unnamed. */
+    public function getName(): ?string
+    {
+        return $this->name;
+    }
+
+    /**
+     * Build a real path from this route's path template by substituting
+     * `{param}` / `{param:regex}` placeholders with values from $params.
+     *
+     * @param array<string,int|string> $params
+     * @throws MissingRouteParameterException if a placeholder has no matching entry in $params.
+     */
+    public function buildUrl(array $params): string
+    {
+        return preg_replace_callback(
+            self::PARAM_PATTERN,
+            function (array $m) use ($params): string {
+                $name = $m[1];
+
+                if (!array_key_exists($name, $params)) {
+                    throw new MissingRouteParameterException(
+                        sprintf('Missing required parameter "%s" for route "%s"', $name, $this->path)
+                    );
+                }
+
+                return (string) $params[$name];
+            },
+            $this->path
+        );
     }
 
     /**
@@ -90,7 +139,7 @@ final class Route
         // Replace {name} / {name:regex} tokens with unique alphanumeric
         // placeholders first, so preg_quote() below cannot mangle them.
         $withPlaceholders = preg_replace_callback(
-            '#\{([a-zA-Z_][a-zA-Z0-9_]*)(:([^{}]+))?\}#',
+            self::PARAM_PATTERN,
             function (array $m) use (&$paramNames, &$placeholders, &$index): string {
                 $name = $m[1];
                 $paramNames[] = $name;

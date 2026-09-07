@@ -22,6 +22,7 @@ require_once 'src/Route.php';
 require_once 'src/Router.php';
 require_once 'src/RouteNotFoundException.php';
 require_once 'src/MethodNotAllowedException.php';
+require_once 'src/MissingRouteParameterException.php';
 ```
 
 ## Usage
@@ -108,6 +109,50 @@ function (array $request, callable $next): mixed {
 
 A middleware can short-circuit the pipeline simply by returning without calling `$next()`.
 
+## Named Routes
+
+Give a route a name via the fluent `->name()` method on the `Route` object returned by
+`get`/`post`/`put`/`patch`/`delete`/`any`, then build a real path back from it (and its params)
+with `$router->url()` instead of hand-concatenating strings:
+
+```php
+use Kasapdev\MicroRouter\Router;
+use Kasapdev\MicroRouter\MissingRouteParameterException;
+use Kasapdev\MicroRouter\RouteNotFoundException;
+
+$router = new Router();
+
+$router->get('/users/{id}', fn (array $req) => 'user #' . $req['params']['id'])
+    ->name('user.show');
+
+$router->group('/api', function (Router $api) {
+    $api->get('/v1/posts/{year}/{slug:[a-z0-9-]+}', fn () => 'post')
+        ->name('api.post.show');
+});
+
+echo $router->url('user.show', ['id' => 42]);
+// => /users/42
+
+echo $router->url('api.post.show', ['year' => 2026, 'slug' => 'hello-world']);
+// => /api/v1/posts/2026/hello-world
+
+try {
+    $router->url('user.show', []); // 'id' is required but missing
+} catch (MissingRouteParameterException $e) {
+    echo $e->getMessage(); // Missing required parameter "id" for route "/users/{id}"
+}
+
+try {
+    $router->url('no.such.route');
+} catch (RouteNotFoundException $e) {
+    echo $e->getMessage(); // No named route "no.such.route" is registered
+}
+```
+
+`url()` reuses the exact same `{param}` / `{param:regex}` placeholder syntax used for matching —
+it just substitutes values back in instead of extracting them, and includes any group prefix the
+route was registered under.
+
 ## API
 
 ### `Router`
@@ -117,15 +162,19 @@ A middleware can short-circuit the pipeline simply by returning without calling 
 - `group(string $prefix, callable $callback): void` — `$callback` receives the `Router` instance; groups nest
 - `use(callable $middleware): void` — registers global middleware
 - `dispatch(string $method, string $uri): mixed` — runs the pipeline for the matching route and returns its result
+- `url(string $name, array $params = []): string` — builds the path for a named route by substituting `$params` into its placeholders
 
 ### `Route`
 
 - `middleware(callable ...$middleware): self` — fluent, attaches route-specific middleware
+- `name(string $name): static` — fluent, names the route so it can be looked up via `Router::url()`
+- `getName(): ?string` — the name assigned via `->name()`, or `null` if unnamed
 
 ### Exceptions
 
-- `RouteNotFoundException` — no route matches the path
+- `RouteNotFoundException` — no route matches the path, or `url()` was called with an unregistered route name
 - `MethodNotAllowedException` — path matches, method doesn't; `getAllowedMethods(): array` lists what would have matched
+- `MissingRouteParameterException` — `url()` was called without a value for one of the route's required placeholders
 
 ## Testing
 
