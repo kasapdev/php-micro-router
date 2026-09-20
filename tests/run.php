@@ -301,5 +301,80 @@ try {
 }
 check('url() throws RouteNotFoundException for an unregistered route name', $threw);
 
+// --- HEAD and OPTIONS routes ------------------------------------------------------------
+
+$router = new Router();
+$router->head('/ping', fn (array $req) => 'head:' . $req['method']);
+$router->options('/ping', fn (array $req) => 'options:' . $req['method']);
+$router->get('/ping', fn (array $req) => 'get');
+
+check('head() route matches HEAD requests', $router->dispatch('HEAD', '/ping') === 'head:HEAD');
+check('options() route matches OPTIONS requests', $router->dispatch('OPTIONS', '/ping') === 'options:OPTIONS');
+check('head()/options() do not interfere with the GET route on the same path', $router->dispatch('GET', '/ping') === 'get');
+
+$router = new Router();
+$router->head('/only-head', fn (array $req) => 'ok');
+$allowed = [];
+try {
+    $router->dispatch('GET', '/only-head');
+} catch (MethodNotAllowedException $e) {
+    $allowed = $e->getAllowedMethods();
+}
+check('a HEAD-only path reports HEAD as the allowed method for other verbs', $allowed === ['HEAD']);
+
+// --- fallback() for unmatched paths -----------------------------------------------------
+
+$router = new Router();
+$router->get('/known', fn (array $req) => 'known');
+$router->fallback(fn (array $req) => '404:' . $req['method'] . ' ' . $req['path'] . ' q=' . ($req['query']['x'] ?? '-'));
+
+check('fallback() handles a request whose path matches no route', $router->dispatch('GET', '/nope?x=1') === '404:GET /nope q=1');
+check('fallback() does not affect routes that do match', $router->dispatch('GET', '/known') === 'known');
+check('fallback() request has empty params', (function () {
+    $r = new Router();
+    $r->fallback(fn (array $req) => $req['params']);
+    return $r->dispatch('GET', '/x') === [];
+})());
+
+$router = new Router();
+$router->get('/only-get', fn (array $req) => 'ok');
+$router->fallback(fn (array $req) => 'fallback');
+$threw405 = false;
+try {
+    $router->dispatch('POST', '/only-get');
+} catch (MethodNotAllowedException $e) {
+    $threw405 = true;
+}
+check('fallback() does not swallow 405: a path matched under another method still throws', $threw405);
+
+$router = new Router();
+$order = [];
+$router->use(function (array $req, callable $next) use (&$order) {
+    $order[] = 'mw-before';
+    $result = $next($req);
+    $order[] = 'mw-after';
+    return $result;
+});
+$router->fallback(function (array $req) use (&$order) {
+    $order[] = 'fallback';
+    return 'nf';
+});
+$result = $router->dispatch('GET', '/missing');
+check('fallback() runs through the global middleware pipeline', $result === 'nf' && $order === ['mw-before', 'fallback', 'mw-after']);
+
+$router = new Router();
+$router->fallback(fn (array $req) => 'first');
+$router->fallback(fn (array $req) => 'second');
+check('calling fallback() again replaces the previous handler', $router->dispatch('GET', '/x') === 'second');
+
+$router = new Router();
+$threwNotFound = false;
+try {
+    $router->dispatch('GET', '/x');
+} catch (RouteNotFoundException $e) {
+    $threwNotFound = true;
+}
+check('without a fallback, an unmatched path still throws RouteNotFoundException', $threwNotFound);
+
 echo $__failures === 0 ? "\nAll tests passed.\n" : "\n$__failures test(s) FAILED.\n";
 exit($__failures === 0 ? 0 : 1);

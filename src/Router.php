@@ -29,6 +29,9 @@ final class Router
     /** @var string[] */
     private array $groupPrefixStack = [];
 
+    /** @var callable|null */
+    private $fallbackHandler = null;
+
     public function get(string $path, callable $handler): Route
     {
         return $this->addRoute('GET', $path, $handler);
@@ -54,6 +57,16 @@ final class Router
         return $this->addRoute('DELETE', $path, $handler);
     }
 
+    public function head(string $path, callable $handler): Route
+    {
+        return $this->addRoute('HEAD', $path, $handler);
+    }
+
+    public function options(string $path, callable $handler): Route
+    {
+        return $this->addRoute('OPTIONS', $path, $handler);
+    }
+
     /** Register a route that matches any HTTP method. */
     public function any(string $path, callable $handler): Route
     {
@@ -73,6 +86,22 @@ final class Router
         } finally {
             array_pop($this->groupPrefixStack);
         }
+    }
+
+    /**
+     * Register a handler for requests whose path matches no route at all, so
+     * an application can return its own "not found" response instead of
+     * catching RouteNotFoundException around dispatch().
+     *
+     * The handler receives the usual request array (with empty `params`) and
+     * runs through the global middleware, like any routed request. A path that
+     * matches a route under a different method is still a 405 and throws
+     * MethodNotAllowedException; the fallback only replaces the 404 case.
+     * Calling this again replaces the previous fallback.
+     */
+    public function fallback(callable $handler): void
+    {
+        $this->fallbackHandler = $handler;
     }
 
     /** Register global middleware, run (in registration order) before route-specific middleware. */
@@ -129,7 +158,7 @@ final class Router
      * Dispatch a method + URI through the matching route's middleware
      * pipeline and handler, returning whatever the handler returns.
      *
-     * @throws RouteNotFoundException    if no route matches the path at all.
+     * @throws RouteNotFoundException    if no route matches the path at all and no fallback() is set.
      * @throws MethodNotAllowedException if the path matches but not the method.
      */
     public function dispatch(string $method, string $uri): mixed
@@ -189,6 +218,18 @@ final class Router
                 ),
                 array_values(array_unique($allowedMethods))
             );
+        }
+
+        if ($this->fallbackHandler !== null) {
+            $request = [
+                'method' => $method,
+                'uri' => $uri,
+                'path' => $path,
+                'params' => [],
+                'query' => $query,
+            ];
+
+            return $this->runPipeline($this->globalMiddleware, $request, $this->fallbackHandler);
         }
 
         throw new RouteNotFoundException(sprintf('No route found for %s %s', $method, $path));
