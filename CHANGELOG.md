@@ -4,6 +4,20 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [1.3.0] - 2026-09-20
+
+### Added
+
+- `Router::fallback(callable $handler): void` — a handler for requests whose
+  path matches no route, so applications can return their own "not found"
+  response instead of catching `RouteNotFoundException`. It receives the usual
+  request array (with empty `params`) and runs through the global middleware.
+  A path that matches a route under a different method is still a 405
+  (`MethodNotAllowedException`); only the 404 case is replaced. Without a
+  fallback, behaviour is unchanged.
+- `Router::head()` and `Router::options()` route registrars, alongside the
+  existing `get/post/put/patch/delete`.
+
 ## [1.2.0] - 2026-09-07
 
 ### Added

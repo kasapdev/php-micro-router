@@ -109,6 +109,24 @@ function (array $request, callable $next): mixed {
 
 A middleware can short-circuit the pipeline simply by returning without calling `$next()`.
 
+## Custom "not found" handling
+
+By default an unmatched path makes `dispatch()` throw `RouteNotFoundException`.
+Register a `fallback()` to produce your own response instead; it receives the
+same request array (with empty `params`) and runs through the global
+middleware:
+
+```php
+$router->fallback(function (array $request) {
+    return ['status' => 404, 'body' => 'Nothing at ' . $request['path']];
+});
+
+$router->dispatch('GET', '/does-not-exist'); // ['status' => 404, 'body' => 'Nothing at /does-not-exist']
+```
+
+A path that *does* exist under a different HTTP method is still reported as
+405 via `MethodNotAllowedException`; the fallback only replaces the 404 case.
+
 ## Named Routes
 
 Give a route a name via the fluent `->name()` method on the `Route` object returned by
@@ -157,8 +175,9 @@ route was registered under.
 
 ### `Router`
 
-- `get/post/put/patch/delete(string $path, callable $handler): Route`
+- `get/post/put/patch/delete/head/options(string $path, callable $handler): Route`
 - `any(string $path, callable $handler): Route` — matches any HTTP method
+- `fallback(callable $handler): void` — handler for requests whose path matches no route (replaces the `RouteNotFoundException`); runs through global middleware. A 405 is still thrown for a path matched under another method
 - `group(string $prefix, callable $callback): void` — `$callback` receives the `Router` instance; groups nest
 - `use(callable $middleware): void` — registers global middleware
 - `dispatch(string $method, string $uri): mixed` — runs the pipeline for the matching route and returns its result
